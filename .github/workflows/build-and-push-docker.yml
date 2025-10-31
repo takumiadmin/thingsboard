@@ -23,57 +23,69 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: Free disk space
+      run: |
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /usr/share/swift
+        df -h
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
+        cache: 'maven'
 
-    - name: Cache Maven packages
-      uses: actions/cache@v4
-      with:
-        path: ~/.m2
-        key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
-        restore-keys: ${{ runner.os }}-m2
-
-    - name: Build ThingsBoard JARs
-      run: mvn clean install -DskipTests -Ddockerfile.skip=true -Dlicense.skip=true
-
-    - name: Copy .deb and config files to docker build dir
+    - name: Build only tb-node (skip others)
       run: |
-        # Find the built .deb (it's always thingsboard*.deb)
-        DEB_FILE=$(find . -name "thingsboard*.deb" | head -1)
+        mvn -pl msa/tb-node -am clean install \
+          -DskipTests \
+          -Dlicense.skip=true \
+          -Ddockerfile.skip=true \
+          -Dmaven.javadoc.skip=true \
+          -Dmaven.source.skip=true \
+          -T 2C
+
+    - name: Copy .deb and config
+      run: |
+        DEB_FILE=$(find msa/tb-node -name "thingsboard*.deb" | head -1)
         if [ -z "$DEB_FILE" ]; then
-          echo "Error: .deb not found"
+          echo "ERROR: .deb not found!"
           find . -name "*.deb"
           exit 1
         fi
-        echo "Found .deb: $DEB_FILE"
+        mkdir -p msa/tb-node/docker
         cp "$DEB_FILE" msa/tb-node/docker/thingsboard.deb
-        cp application/src/main/resources/logback.xml msa/tb-node/docker/logback.xml || echo "logback.xml not found in expected path"
-        cp msa/tb-node/src/main/resources/start-tb-node.sh msa/tb-node/docker/start-tb-node.sh || echo "start script not found"
+        cp application/src/main/resources/logback.xml msa/tb-node/docker/ || true
+        cp msa/tb-node/src/main/resources/start-tb-node.sh msa/tb-node/docker/ || true
 
-    - name: Build tb-node Docker image
+    - name: Build Docker image
       run: |
         cd msa/tb-node/docker
-        docker build -t tb-node:latest .
+        docker build --no-cache -t tb-node:latest .
 
-    - name: Show built Docker images
+    - name: Show images
       run: docker images
 
-    - name: Log in to GHCR
+    - name: Login to GHCR
       uses: docker/login-action@v3
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Tag and Push tb-node
+    - name: Push image
       run: |
         docker tag tb-node:latest ghcr.io/takumiadmin/tb-node:latest
-        docker tag tb-node:latest ghcr.io/takumiadmin/tb-node:${{ github.sha }}
         docker push ghcr.io/takumiadmin/tb-node:latest
-        docker push ghcr.io/takumiadmin/tb-node:${{ github.sha }}
