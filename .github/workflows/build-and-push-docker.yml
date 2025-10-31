@@ -39,32 +39,35 @@ jobs:
         key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
         restore-keys: ${{ runner.os }}-m2
 
-    - name: Build ThingsBoard with Docker
-      run: mvn clean install -DskipTests -Ddockerfile.skip=false -Dlicense.skip=true
+    - name: Build ThingsBoard JARs
+      run: mvn clean install -DskipTests -Ddockerfile.skip=true -Dlicense.skip=true
+
+    - name: Build tb-node Docker image from scratch
+      run: |
+        cd msa/tb-node/docker
+        docker build -t tb-node:latest .
       env:
-        MAVEN_OPTS: "-Xmx6g -XX:MaxMetaspaceSize=512m -XX:+UseG1GC"
+        DEBIAN_FRONTEND: noninteractive
 
     - name: Show built Docker images
       run: docker images
 
-    - name: Log in to GitHub Container Registry (GHCR)
+    - name: Log in to GHCR
       uses: docker/login-action@v3
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Tag and Push tb-node image
+    - name: Tag and Push tb-node
       run: |
-        # Find and tag the actual built image (usually tb-node:latest from Maven)
         IMAGE_NAME=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "tb-node:latest" | head -1)
         if [ -z "$IMAGE_NAME" ]; then
-          echo "No tb-node:latest image found. Listing all images:"
+          echo "Error: tb-node:latest not found"
           docker images
           exit 1
         fi
-        echo "Tagging $IMAGE_NAME as ghcr.io/takumiadmin/tb-node"
         docker tag "$IMAGE_NAME" ghcr.io/takumiadmin/tb-node:latest
-        docker tag "$IMAGE_NAME" ghcr.io/takumiadmin/tb-node:${GITHUB_SHA::7}
+        docker tag "$IMAGE_NAME" ghcr.io/takumiadmin/tb-node:${{ github.sha }}
         docker push ghcr.io/takumiadmin/tb-node:latest
-        docker push ghcr.io/takumiadmin/tb-node:${GITHUB_SHA::7}
+        docker push ghcr.io/takumiadmin/tb-node:${{ github.sha }}
