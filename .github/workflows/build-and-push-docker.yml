@@ -1,122 +1,46 @@
-#
-# Copyright © 2016-2025 The Thingsboard Authors
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
-
-name: Build and Push Custom Docker Image
+name: Build & Push tb-node
 
 on:
   push:
-    branches: [ master ]
+    paths:
+      - 'msa/tb-node/**'
+      - '.github/workflows/build-and-push-docker.yml'
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
       packages: write
+      contents: read
 
     steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 1
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Free disk space
-      run: |
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /opt/ghc
-        sudo rm -rf /usr/local/lib/android
-        sudo rm -rf /usr/share/swift
-        df -h
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
 
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: 'maven'
+      - name: Build JAR
+        run: |
+          cd msa/tb-node
+          mvn clean package -DskipTests
 
-    - name: Build only tb-node (skip others)
-      run: |
-        mvn -pl msa/tb-node -am clean install \
-          -DskipTests \
-          -Dlicense.skip=true \
-          -Ddockerfile.skip=true \
-          -Dmaven.javadoc.skip=true \
-          -Dmaven.source.skip=true \
-          -T 2C
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Extract and fix start-tb-node.sh from .deb
-      run: |
-        # Find .deb
-        DEB_FILE=$(find msa/tb-node -name "thingsboard*.deb" | head -1)
-        if [ -z "$DEB_FILE" ]; then
-          echo "ERROR: .deb not found!"
-          find . -name "*.deb"
-          exit 1
-        fi
-
-        # Create temp dir
-        mkdir -p temp-deb
-        cd temp-deb
-
-        # Extract .deb
-        ar x "../$DEB_FILE"
-        tar -xzf data.tar.gz
-
-        # Find and fix start script
-        SCRIPT_PATH=$(find . -name "start-tb-node.sh" | head -1)
-        if [ -z "$SCRIPT_PATH" ]; then
-          echo "ERROR: start-tb-node.sh not found in .deb"
-          exit 1
-        fi
-
-        # Hardcode paths
-        sed -i 's|${pkg.installFolder}|/usr/share/thingsboard|g' "$SCRIPT_PATH"
-        sed -i 's|${pkg.name}|thingsboard|g' "$SCRIPT_PATH"
-        sed -i 's|${pkg.user}|thingsboard|g' "$SCRIPT_PATH"
-        sed -i 's|${project.name}|ThingsBoard Node|g' "$SCRIPT_PATH"
-
-        # Copy to Docker context
-        mkdir -p ../msa/tb-node/docker
-        cp "$SCRIPT_PATH" ../msa/tb-node/docker/start-tb-node.sh
-        cp "../$DEB_FILE" ../msa/tb-node/docker/thingsboard.deb
-
-        # Copy logback.xml from common location
-        cp ../application/src/main/resources/logback.xml ../msa/tb-node/docker/logback.xml || \
-          cp ../msa/tb-node/src/main/resources/logback.xml ../msa/tb-node/docker/logback.xml 2>/dev/null || \
-          echo "logback.xml not found — will use default"
-
-        cd ..
-        rm -rf temp-deb
-
-    - name: Build Docker image
-      run: |
-        cd msa/tb-node/docker
-        docker build --no-cache -t tb-node:latest .
-
-    - name: Show images
-      run: docker images
-
-    - name: Login to GHCR
-      uses: docker/login-action@v3
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Push image
-      run: |
-        docker tag tb-node:latest ghcr.io/takumiadmin/tb-node:latest
-        docker push ghcr.io/takumiadmin/tb-node:latest
+      - name: Build & Push Docker
+        run: |
+          cd msa/tb-node/docker
+          IMAGE=ghcr.io/${{ github.repository }}/tb-node
+          docker build -t $IMAGE:latest -t $IMAGE:${{ github.sha }} .
+          docker push $IMAGE:latest
+          docker push $IMAGE:${{ github.sha }}
