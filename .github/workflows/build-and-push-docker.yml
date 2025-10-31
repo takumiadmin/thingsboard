@@ -42,16 +42,24 @@ jobs:
     - name: Build ThingsBoard JARs
       run: mvn clean install -DskipTests -Ddockerfile.skip=true -Dlicense.skip=true
 
-    - name: Build tb-node Docker image from scratch
+    - name: Copy .deb and config files to docker build dir
+      run: |
+        # Find the built .deb (it's always thingsboard*.deb)
+        DEB_FILE=$(find . -name "thingsboard*.deb" | head -1)
+        if [ -z "$DEB_FILE" ]; then
+          echo "Error: .deb not found"
+          find . -name "*.deb"
+          exit 1
+        fi
+        echo "Found .deb: $DEB_FILE"
+        cp "$DEB_FILE" msa/tb-node/docker/thingsboard.deb
+        cp application/src/main/resources/logback.xml msa/tb-node/docker/logback.xml || echo "logback.xml not found in expected path"
+        cp msa/tb-node/src/main/resources/start-tb-node.sh msa/tb-node/docker/start-tb-node.sh || echo "start script not found"
+
+    - name: Build tb-node Docker image
       run: |
         cd msa/tb-node/docker
-        docker build \
-          --build-arg pkg.name=thingsboard \
-          --build-arg pkg.user=thingsboard \
-          --build-arg pkg.installFolder=/usr/share/thingsboard \
-          -t tb-node:latest .
-      env:
-        DEBIAN_FRONTEND: noninteractive
+        docker build -t tb-node:latest .
 
     - name: Show built Docker images
       run: docker images
@@ -65,13 +73,7 @@ jobs:
 
     - name: Tag and Push tb-node
       run: |
-        IMAGE_NAME=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "tb-node:latest" | head -1)
-        if [ -z "$IMAGE_NAME" ]; then
-          echo "Error: tb-node:latest not found"
-          docker images
-          exit 1
-        fi
-        docker tag "$IMAGE_NAME" ghcr.io/takumiadmin/tb-node:latest
-        docker tag "$IMAGE_NAME" ghcr.io/takumiadmin/tb-node:${{ github.sha }}
+        docker tag tb-node:latest ghcr.io/takumiadmin/tb-node:latest
+        docker tag tb-node:latest ghcr.io/takumiadmin/tb-node:${{ github.sha }}
         docker push ghcr.io/takumiadmin/tb-node:latest
         docker push ghcr.io/takumiadmin/tb-node:${{ github.sha }}
