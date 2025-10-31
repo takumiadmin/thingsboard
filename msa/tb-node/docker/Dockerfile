@@ -14,31 +14,26 @@
 # limitations under the License.
 #
 
-# Accept build args
-ARG pkg.name=thingsboard
-ARG pkg.user=thingsboard
-ARG pkg.installFolder=/usr/share/${pkg.name}
-
 FROM ubuntu:22.04
 
 # Install OpenJDK 17 + deps
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends openjdk-17-jre wget gnupg2 ca-certificates lsb-release && \
+    apt-get install -y --no-install-recommends openjdk-17-jre wget ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy built files using args
-COPY logback.xml start-tb-node.sh ${pkg.name}.deb /tmp/
+# Copy built files (hardcoded: package is always 'thingsboard')
+COPY logback.xml start-tb-node.sh thingsboard.deb /tmp/
 
 # Install TB
 RUN chmod a+x /tmp/*.sh \
     && mv /tmp/start-tb-node.sh /usr/bin \
-    && (yes | dpkg -i /tmp/${pkg.name}.deb) \
-    && rm /tmp/${pkg.name}.deb \
-    && mv /tmp/logback.xml ${pkg.installFolder}/conf \
-    && chown -R ${pkg.user}:${pkg.user} ${pkg.installFolder}/conf/logback.xml \
-    && (systemctl --no-reload disable --now ${pkg.name}.service > /dev/null 2>&1 || :) \
-    && chown -R ${pkg.user}:${pkg.user} /tmp \
-    && chmod 555 ${pkg.installFolder}/bin/${pkg.name}.jar
+    && (yes | dpkg -i /tmp/thingsboard.deb) \
+    && rm /tmp/thingsboard.deb \
+    && mv /tmp/logback.xml /usr/share/thingsboard/conf \
+    && chown -R thingsboard:thingsboard /usr/share/thingsboard/conf/logback.xml \
+    && (systemctl --no-reload disable --now thingsboard.service > /dev/null 2>&1 || :) \
+    && chown -R thingsboard:thingsboard /tmp \
+    && chmod 555 /usr/share/thingsboard/bin/thingsboard.jar
 
-USER ${pkg.user}
+USER thingsboard
 CMD ["start-tb-node.sh"]
