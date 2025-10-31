@@ -1,3 +1,19 @@
+#
+# Copyright © 2016-2025 The Thingsboard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
 name: Build and Push Custom Docker Image
 
 on:
@@ -24,7 +40,7 @@ jobs:
         restore-keys: ${{ runner.os }}-m2
 
     - name: Build ThingsBoard with Docker
-      run: mvn clean install -DskipTests -Ddockerfile.skip=false
+      run: mvn clean install -DskipTests -Ddockerfile.skip=false -Dlicense.skip=true
       env:
         MAVEN_OPTS: "-Xmx6g -XX:MaxMetaspaceSize=512m -XX:+UseG1GC"
 
@@ -40,8 +56,15 @@ jobs:
 
     - name: Tag and Push tb-node image
       run: |
-        # Tag the main tb-node image (adjust if logs show different name/tag)
-        docker tag thingsboard/tb-node:latest ghcr.io/takumiadmin/tb-node:latest
-        docker tag thingsboard/tb-node:latest ghcr.io/takumiadmin/tb-node:${GITHUB_SHA::7}
+        # Find and tag the actual built image (usually tb-node:latest from Maven)
+        IMAGE_NAME=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "tb-node:latest" | head -1)
+        if [ -z "$IMAGE_NAME" ]; then
+          echo "No tb-node:latest image found. Listing all images:"
+          docker images
+          exit 1
+        fi
+        echo "Tagging $IMAGE_NAME as ghcr.io/takumiadmin/tb-node"
+        docker tag "$IMAGE_NAME" ghcr.io/takumiadmin/tb-node:latest
+        docker tag "$IMAGE_NAME" ghcr.io/takumiadmin/tb-node:${GITHUB_SHA::7}
         docker push ghcr.io/takumiadmin/tb-node:latest
         docker push ghcr.io/takumiadmin/tb-node:${GITHUB_SHA::7}
