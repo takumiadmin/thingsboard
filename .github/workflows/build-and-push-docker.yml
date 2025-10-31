@@ -42,7 +42,7 @@ jobs:
     - name: Build full ThingsBoard (generates .deb)
       run: mvn clean install -DskipTests -Ddockerfile.skip=true -Dlicense.skip=true
       env:
-        MAVEN_OPTS: "-Xmx4g -XX:MaxMetaspaceSize=512m -XX:+UseG1GC"
+        MAVEN_OPTS: "-Xmx3g -XX:MaxMetaspaceSize=512m -XX:+UseG1GC"
 
     - name: Copy .deb to Docker dir
       run: |
@@ -56,44 +56,55 @@ jobs:
         mkdir -p msa/tb-node/docker
         cp "$DEB_FILE" msa/tb-node/docker/thingsboard.deb
 
-        # Copy configs
-        cp application/src/main/resources/logback.xml msa/tb-node/docker/ || true
-        # Extract and fix start script from .deb
+        # Extract .deb and find start-tb-node.sh
         cd msa/tb-node/docker
         mkdir temp-deb && cd temp-deb
         ar x ../thingsboard.deb
         tar -xzf data.tar.gz
+
+        # Find script in correct path (4.3+)
         SCRIPT_PATH=$(find . -name "start-tb-node.sh" | head -1)
         if [ -z "$SCRIPT_PATH" ]; then
-          echo "ERROR: start-tb-node.sh not found in .deb"
+          echo "ERROR: start-tb-node.sh not found! Listing bin dir:"
+          find . -path "*/bin/*" | head -20
           exit 1
         fi
+        echo "Found script: $SCRIPT_PATH"
+
+        # Fix script paths
         sed -i 's|\${pkg.installFolder}|/usr/share/thingsboard|g' "$SCRIPT_PATH"
         sed -i 's|\${pkg.name}|thingsboard|g' "$SCRIPT_PATH"
         sed -i 's|\${pkg.user}|thingsboard|g' "$SCRIPT_PATH"
         sed -i 's|\${project.name}|ThingsBoard Node|g' "$SCRIPT_PATH"
-        cp "$SCRIPT_PATH" ../
+
+        # Copy to docker dir
+        cp "$SCRIPT_PATH" ../start-tb-node.sh
+        chmod +x ../start-tb-node.sh
+
+        # Copy logback.xml if exists
+        cp ../../application/src/main/resources/logback.xml ../ || true
+
         cd .. && rm -rf temp-deb
 
-    - name: Show built .deb
+    - name: Show files in docker dir
       run: ls -la msa/tb-node/docker/
 
-    - name: Build tb-node Docker image
+    - name: Build Docker image
       run: |
         cd msa/tb-node/docker
         docker build -t tb-node:latest .
 
-    - name: Show built Docker images
+    - name: Show built images
       run: docker images
 
-    - name: Log in to GitHub Container Registry (GHCR)
+    - name: Login to GHCR
       uses: docker/login-action@v3
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Tag and Push tb-node image
+    - name: Push to GHCR
       run: |
         docker tag tb-node:latest ghcr.io/takumiadmin/tb-node:latest
         docker tag tb-node:latest ghcr.io/takumiadmin/tb-node:${GITHUB_SHA::7}
