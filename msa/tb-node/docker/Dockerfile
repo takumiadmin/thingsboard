@@ -14,6 +14,11 @@
 # limitations under the License.
 #
 
+# Accept build args
+ARG pkg.name=thingsboard
+ARG pkg.user=thingsboard
+ARG pkg.installFolder=/usr/share/${pkg.name}
+
 FROM ubuntu:22.04
 
 # Install OpenJDK 17 + deps
@@ -21,7 +26,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends openjdk-17-jre wget gnupg2 ca-certificates lsb-release && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy built files
+# Copy built files using args
 COPY logback.xml start-tb-node.sh ${pkg.name}.deb /tmp/
 
 # Install TB
