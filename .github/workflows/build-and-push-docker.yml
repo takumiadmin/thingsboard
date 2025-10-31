@@ -45,7 +45,11 @@ jobs:
     - name: Build tb-node Docker image from scratch
       run: |
         cd msa/tb-node/docker
-        docker build -t tb-node:latest .
+        docker build \
+          --build-arg pkg.name=thingsboard \
+          --build-arg pkg.user=thingsboard \
+          --build-arg pkg.installFolder=/usr/share/thingsboard \
+          -t tb-node:latest .
       env:
         DEBIAN_FRONTEND: noninteractive
 
