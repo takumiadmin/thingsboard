@@ -14,20 +14,26 @@
 # limitations under the License.
 #
 
-FROM thingsboard/openjdk17:bookworm-slim
+FROM ubuntu:22.04
 
+# Install OpenJDK 17 + deps
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends openjdk-17-jre wget gnupg2 ca-certificates lsb-release && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy built files
 COPY logback.xml start-tb-node.sh ${pkg.name}.deb /tmp/
 
+# Install TB
 RUN chmod a+x /tmp/*.sh \
-    && mv /tmp/start-tb-node.sh /usr/bin && \
-    (yes | dpkg -i /tmp/${pkg.name}.deb) && \
-    rm /tmp/${pkg.name}.deb && \
-    mv /tmp/logback.xml ${pkg.installFolder}/conf && \
-    chown -R ${pkg.user}:${pkg.user} ${pkg.installFolder}/conf/logback.xml && \
-    (systemctl --no-reload disable --now ${pkg.name}.service > /dev/null 2>&1 || :) && \
-    chown -R ${pkg.user}:${pkg.user} /tmp && \
-    chmod 555 ${pkg.installFolder}/bin/${pkg.name}.jar
+    && mv /tmp/start-tb-node.sh /usr/bin \
+    && (yes | dpkg -i /tmp/${pkg.name}.deb) \
+    && rm /tmp/${pkg.name}.deb \
+    && mv /tmp/logback.xml ${pkg.installFolder}/conf \
+    && chown -R ${pkg.user}:${pkg.user} ${pkg.installFolder}/conf/logback.xml \
+    && (systemctl --no-reload disable --now ${pkg.name}.service > /dev/null 2>&1 || :) \
+    && chown -R ${pkg.user}:${pkg.user} /tmp \
+    && chmod 555 ${pkg.installFolder}/bin/${pkg.name}.jar
 
 USER ${pkg.user}
-
 CMD ["start-tb-node.sh"]
