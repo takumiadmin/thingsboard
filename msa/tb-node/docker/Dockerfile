@@ -1,39 +1,28 @@
-#
-# Copyright © 2016-2025 The Thingsboard Authors
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
+FROM openjdk:17-jre-slim
 
-FROM ubuntu:22.04
-
-# Install OpenJDK 17 + deps
+# Install dependencies
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends openjdk-17-jre wget ca-certificates && \
+    apt-get install -y --no-install-recommends wget ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy built files (hardcoded: package is always 'thingsboard')
-COPY logback.xml start-tb-node.sh thingsboard.deb /tmp/
+# Create user
+RUN groupadd -r thingsboard && useradd -r -g thingsboard thingsboard
 
-# Install TB
-RUN chmod a+x /tmp/*.sh \
-    && mv /tmp/start-tb-node.sh /usr/bin \
-    && (yes | dpkg -i /tmp/thingsboard.deb) \
-    && rm /tmp/thingsboard.deb \
-    && mv /tmp/logback.xml /usr/share/thingsboard/conf \
-    && chown -R thingsboard:thingsboard /usr/share/thingsboard/conf/logback.xml \
-    && (systemctl --no-reload disable --now thingsboard.service > /dev/null 2>&1 || :) \
-    && chown -R thingsboard:thingsboard /tmp \
-    && chmod 555 /usr/share/thingsboard/bin/thingsboard.jar
+# Copy JAR from Maven build
+COPY target/tb-node-*.jar /usr/share/thingsboard/bin/thingsboard.jar
+COPY application/src/main/resources/thingsboard.yml /usr/share/thingsboard/conf/thingsboard.yml
+COPY application/src/main/resources/logback.xml /usr/share/thingsboard/conf/logback.xml
+
+# Create dirs
+RUN mkdir -p /usr/share/thingsboard/data \
+    && mkdir -p /var/log/thingsboard \
+    && chown -R thingsboard:thingsboard /usr/share/thingsboard \
+    && chown -R thingsboard:thingsboard /var/log/thingsboard
+
+# Expose ports
+EXPOSE 8080 1883 8883 5683-5688/udp
 
 USER thingsboard
-CMD ["start-tb-node.sh"]
+WORKDIR /usr/share/thingsboard
+
+CMD ["java", "-Xmx1500m", "-Xms512m", "-Dlogging.config=/usr/share/thingsboard/conf/logback.xml", "-jar", "/usr/share/thingsboard/bin/thingsboard.jar"]
