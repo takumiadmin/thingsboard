@@ -1,46 +1,101 @@
-name: Build & Push tb-node
+#
+# Copyright © 2016-2025 The Thingsboard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: Build and Push Custom Docker Image
 
 on:
   push:
-    paths:
-      - 'msa/tb-node/**'
-      - '.github/workflows/build-and-push-docker.yml'
-  workflow_dispatch:
+    branches: [ master ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      packages: write
-      contents: read
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: maven
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
 
-      - name: Build JAR
-        run: |
-          cd msa/tb-node
-          mvn clean package -DskipTests
+    - name: Cache Maven packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+        restore-keys: ${{ runner.os }}-m2
 
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Build full ThingsBoard (generates .deb)
+      run: mvn clean install -DskipTests -Ddockerfile.skip=true -Dlicense.skip=true
+      env:
+        MAVEN_OPTS: "-Xmx4g -XX:MaxMetaspaceSize=512m -XX:+UseG1GC"
 
-      - name: Build & Push Docker
-        run: |
-          cd msa/tb-node/docker
-          IMAGE=ghcr.io/${{ github.repository }}/tb-node
-          docker build -t $IMAGE:latest -t $IMAGE:${{ github.sha }} .
-          docker push $IMAGE:latest
-          docker push $IMAGE:${{ github.sha }}
+    - name: Copy .deb to Docker dir
+      run: |
+        DEB_FILE=$(find . -name "thingsboard*.deb" | head -1)
+        if [ -z "$DEB_FILE" ]; then
+          echo "ERROR: .deb not found!"
+          find . -name "*.deb"
+          exit 1
+        fi
+        echo "Found .deb: $DEB_FILE"
+        mkdir -p msa/tb-node/docker
+        cp "$DEB_FILE" msa/tb-node/docker/thingsboard.deb
+
+        # Copy configs
+        cp application/src/main/resources/logback.xml msa/tb-node/docker/ || true
+        # Extract and fix start script from .deb
+        cd msa/tb-node/docker
+        mkdir temp-deb && cd temp-deb
+        ar x ../thingsboard.deb
+        tar -xzf data.tar.gz
+        SCRIPT_PATH=$(find . -name "start-tb-node.sh" | head -1)
+        if [ -z "$SCRIPT_PATH" ]; then
+          echo "ERROR: start-tb-node.sh not found in .deb"
+          exit 1
+        fi
+        sed -i 's|\${pkg.installFolder}|/usr/share/thingsboard|g' "$SCRIPT_PATH"
+        sed -i 's|\${pkg.name}|thingsboard|g' "$SCRIPT_PATH"
+        sed -i 's|\${pkg.user}|thingsboard|g' "$SCRIPT_PATH"
+        sed -i 's|\${project.name}|ThingsBoard Node|g' "$SCRIPT_PATH"
+        cp "$SCRIPT_PATH" ../
+        cd .. && rm -rf temp-deb
+
+    - name: Show built .deb
+      run: ls -la msa/tb-node/docker/
+
+    - name: Build tb-node Docker image
+      run: |
+        cd msa/tb-node/docker
+        docker build -t tb-node:latest .
+
+    - name: Show built Docker images
+      run: docker images
+
+    - name: Log in to GitHub Container Registry (GHCR)
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Tag and Push tb-node image
+      run: |
+        docker tag tb-node:latest ghcr.io/takumiadmin/tb-node:latest
+        docker tag tb-node:latest ghcr.io/takumiadmin/tb-node:${GITHUB_SHA::7}
+        docker push ghcr.io/takumiadmin/tb-node:latest
+        docker push ghcr.io/takumiadmin/tb-node:${GITHUB_SHA::7}
