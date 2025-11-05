@@ -36,17 +36,29 @@ jobs:
           sudo apt-get update && sudo apt-get install -y npm
           npm install --global yarn
 
-          # Build UI first (for ui-ngx.jar)
+          # --- Build UI first ---
           cd ui-ngx
           yarn install --frozen-lockfile
           yarn build:prod
           cd ..
 
-          # Build backend now (uses local ui-ngx.jar)
+          # --- Build backend ---
           mvn clean install -DskipTests -Dlicense.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dskip-web=true
           
-          # Show artifacts
+          echo "List artifacts:"
           ls -lh application/target/
+
+      - name: Patch Dockerfile for direct build
+        run: |
+          # Find the built .deb file
+          DEB_FILE=$(ls application/target/thingsboard-*.deb | head -n1 | xargs -n1 basename)
+          echo "Detected deb file: $DEB_FILE"
+
+          # Replace ${pkg.name}.deb with actual filename in Dockerfile
+          sed -i "s|\${pkg.name}.deb|${DEB_FILE}|g" msa/tb-node/docker/Dockerfile
+
+          echo "Patched Dockerfile:"
+          grep COPY msa/tb-node/docker/Dockerfile
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -77,5 +89,3 @@ jobs:
           platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            TB_DEB=../../application/target/thingsboard-4.2*.deb
