@@ -100,4 +100,5 @@ jobs:
             --push \
             --platform linux/amd64 \
             -t ghcr.io/${{ github.repository_owner }}/tb-node:latest \
+            -t ghcr.io/${{ github.repository_owner }}/tb-node:lts-4.2 \
             docker-build
