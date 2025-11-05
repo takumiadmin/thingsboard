@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1  # shallow clone saves disk space
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -48,20 +50,38 @@ jobs:
           echo "Artifacts produced:"
           ls -lh application/target/
 
-      - name: Patch Dockerfile for jar-based build
+      - name: Prepare minimal docker context
         run: |
-          # Find built jar
-          JAR_FILE=$(ls application/target/thingsboard-*.jar | head -n1 | xargs -n1 basename)
+          # Locate built JAR
+          JAR_FILE=$(ls application/target/thingsboard-*.jar | head -n1)
           echo "Detected JAR: $JAR_FILE"
 
-          # Copy jar into docker context directory
-          cp application/target/$JAR_FILE msa/tb-node/docker/
+          # Prepare a tiny Docker context (only JAR + start script)
+          mkdir docker-build
+          cp "$JAR_FILE" docker-build/thingsboard.jar
+          cp msa/tb-node/docker/start-tb-node.sh docker-build/start-tb-node.sh
 
-          # Replace .deb reference with jar filename
-          sed -i "s|\${pkg.name}.deb|${JAR_FILE}|g" msa/tb-node/docker/Dockerfile
+          # Minimal Dockerfile (no Maven variables)
+          cat > docker-build/Dockerfile <<'EOF'
+          FROM eclipse-temurin:17-jdk-jammy
+          WORKDIR /usr/share/thingsboard
+          COPY thingsboard.jar ./thingsboard.jar
+          COPY start-tb-node.sh ./start-tb-node.sh
+          RUN chmod +x start-tb-node.sh && chmod 555 thingsboard.jar
+          EXPOSE 8080 1883 5683/udp
+          CMD ["./start-tb-node.sh"]
+          EOF
 
-          echo "Updated COPY line in Dockerfile:"
-          grep COPY msa/tb-node/docker/Dockerfile
+          echo "Docker context size:"
+          du -sh docker-build
+
+      - name: Clean up workspace before Docker build
+        run: |
+          echo "Freeing disk space..."
+          sudo rm -rf ~/.m2/repository || true
+          sudo rm -rf ui-ngx/node_modules || true
+          sudo docker system prune -af || true
+          df -h
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -70,56 +90,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/tb-node
-          tags: |
-            type=raw,value=latest
-            type=ref,event=branch
-            type=sha
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # - name: Build & Push Docker image
-      #   uses: docker/build-push-action@v6
-      #   with:
-      #     context: msa/tb-node/docker
-      #     file: msa/tb-node/docker/Dockerfile
-      #     push: true
-      #     platforms: linux/amd64
-      #     tags: ${{ steps.meta.outputs.tags }}
-      #     labels: ${{ steps.meta.outputs.labels }}
-      - name: Clean up workspace before Docker build
-        run: |
-          echo "Freeing disk space..."
-          sudo rm -rf ~/.m2/repository || true
-          sudo rm -rf ui-ngx/node_modules || true
-          sudo docker system prune -af || true
-          df -h
       - name: Build & Push Docker image
         run: |
-          JAR_FILE=$(ls application/target/thingsboard-*.jar | head -n1)
-          echo "Detected JAR: $JAR_FILE"
-
-          # Create a simple Dockerfile dynamically (no Maven vars)
-          cat > Dockerfile.ci <<'EOF'
-          FROM eclipse-temurin:17-jdk-jammy
-          WORKDIR /usr/share/thingsboard
-          COPY ${JAR_FILE} ./thingsboard.jar
-          COPY start-tb-node.sh ./start-tb-node.sh
-          RUN chmod +x start-tb-node.sh && chmod 555 thingsboard.jar
-          EXPOSE 8080 1883 5683/udp
-          CMD ["./start-tb-node.sh"]
-          EOF
-
-          echo "Dockerfile.ci content:"
-          cat Dockerfile.ci
-
+          echo "Starting Docker build & push..."
           docker buildx build \
             --push \
             --platform linux/amd64 \
             -t ghcr.io/${{ github.repository_owner }}/tb-node:latest \
-            -f Dockerfile.ci .
+            docker-build
