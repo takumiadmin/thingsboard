@@ -49,6 +49,16 @@ jobs:
 
           echo "Artifacts produced:"
           ls -lh application/target/
+      - name: Patch start-tb-node.sh placeholders
+        run: |
+          echo "Patching start-tb-node.sh to remove Maven placeholders..."
+          sed -i 's|\${pkg.name}|thingsboard|g' msa/tb-node/docker/start-tb-node.sh
+          sed -i 's|\${pkg.user}|thingsboard|g' msa/tb-node/docker/start-tb-node.sh
+          sed -i 's|\${pkg.installFolder}|/usr/share/thingsboard|g' msa/tb-node/docker/start-tb-node.sh
+
+          echo "Preview of patched script (first 10 lines):"
+          head -n 10 msa/tb-node/docker/start-tb-node.sh
+
 
       - name: Prepare minimal docker context
         run: |
