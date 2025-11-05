@@ -3,8 +3,6 @@ name: Build & Push tb-node (lts-4.2)
 on:
   push:
     branches: [ "lts-4.2" ]
-    paths-ignore:
-      - "**.md"
   workflow_dispatch:
 
 permissions:
@@ -14,18 +12,25 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-22.04
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # optional: speed up Maven when Dockerfile builds
-      - name: Cache Maven repo (for Docker build context)
-        uses: actions/cache@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
-          path: ~/.m2/repository
-          key: m2-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            m2-${{ runner.os }}-
+          java-version: "17"
+          distribution: "temurin"
+          cache: maven
+
+      - name: Build ThingsBoard .deb package
+        run: |
+          sudo apt-get update && sudo apt-get install -y npm
+          npm install --global yarn
+          # Skip UI build to save time and RAM
+          mvn clean install -DskipTests -Dui.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Pdeb -pl '!ui-ngx'
+          ls -lh ./application/target/*.deb
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -47,19 +52,16 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Build from the official Dockerfile in the repo (msa/tb-node/docker/Dockerfile)
-      - name: Build & Push
+      - name: Build & Push Docker image
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: msa/tb-node/docker
           file: msa/tb-node/docker/Dockerfile
           push: true
-          # Only amd64 because EC2 t2.medium is amd64
           platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Large multi-stage build; increase resources & avoid OOM
           build-args: |
-            MAVEN_OPTS=-Xmx2g
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            TB_DEB=../../application/target/thingsboard-4.2*.deb
+          # Copy the prebuilt .deb into build context
+          load: false
