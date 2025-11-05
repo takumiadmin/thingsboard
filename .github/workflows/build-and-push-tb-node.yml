@@ -74,13 +74,26 @@ jobs:
           # Minimal Dockerfile (no Maven variables)
           cat > docker-build/Dockerfile <<'EOF'
           FROM eclipse-temurin:17-jdk-jammy
+
+          # Create ThingsBoard directories
+          RUN mkdir -p /usr/share/thingsboard/bin /usr/share/thingsboard/conf
+
           WORKDIR /usr/share/thingsboard
-          COPY thingsboard.jar ./thingsboard.jar
-          COPY start-tb-node.sh ./start-tb-node.sh
-          RUN chmod +x start-tb-node.sh && chmod 555 thingsboard.jar
+
+          # Copy JAR and startup script into expected locations
+          COPY thingsboard.jar /usr/share/thingsboard/bin/thingsboard.jar
+          COPY start-tb-node.sh /usr/share/thingsboard/start-tb-node.sh
+
+          # Provide a minimal placeholder config to satisfy script expectations
+          RUN echo "# Dummy config for ThingsBoard runtime" > /usr/share/thingsboard/conf/thingsboard.conf
+
+          RUN chmod +x /usr/share/thingsboard/start-tb-node.sh && chmod 555 /usr/share/thingsboard/bin/thingsboard.jar
+
           EXPOSE 8080 1883 5683/udp
-          CMD ["./start-tb-node.sh"]
+
+          CMD ["/usr/share/thingsboard/start-tb-node.sh"]
           EOF
+
 
           echo "Docker context size:"
           du -sh docker-build
