@@ -83,12 +83,36 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # - name: Build & Push Docker image
+      #   uses: docker/build-push-action@v6
+      #   with:
+      #     context: msa/tb-node/docker
+      #     file: msa/tb-node/docker/Dockerfile
+      #     push: true
+      #     platforms: linux/amd64
+      #     tags: ${{ steps.meta.outputs.tags }}
+      #     labels: ${{ steps.meta.outputs.labels }}
       - name: Build & Push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: msa/tb-node/docker
-          file: msa/tb-node/docker/Dockerfile
-          push: true
-          platforms: linux/amd64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+        run: |
+          JAR_FILE=$(ls application/target/thingsboard-*.jar | head -n1)
+          echo "Detected JAR: $JAR_FILE"
+
+          # Create a simple Dockerfile dynamically (no Maven vars)
+          cat > Dockerfile.ci <<'EOF'
+          FROM eclipse-temurin:17-jdk-jammy
+          WORKDIR /usr/share/thingsboard
+          COPY ${JAR_FILE} ./thingsboard.jar
+          COPY start-tb-node.sh ./start-tb-node.sh
+          RUN chmod +x start-tb-node.sh && chmod 555 thingsboard.jar
+          EXPOSE 8080 1883 5683/udp
+          CMD ["./start-tb-node.sh"]
+          EOF
+
+          echo "Dockerfile.ci content:"
+          cat Dockerfile.ci
+
+          docker buildx build \
+            --push \
+            --platform linux/amd64 \
+            -t ghcr.io/${{ github.repository_owner }}/tb-node:latest \
+            -f Dockerfile.ci .
