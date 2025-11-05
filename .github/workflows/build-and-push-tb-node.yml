@@ -92,6 +92,13 @@ jobs:
       #     platforms: linux/amd64
       #     tags: ${{ steps.meta.outputs.tags }}
       #     labels: ${{ steps.meta.outputs.labels }}
+      - name: Clean up workspace before Docker build
+        run: |
+          echo "Freeing disk space..."
+          sudo rm -rf ~/.m2/repository || true
+          sudo rm -rf ui-ngx/node_modules || true
+          sudo docker system prune -af || true
+          df -h
       - name: Build & Push Docker image
         run: |
           JAR_FILE=$(ls application/target/thingsboard-*.jar | head -n1)
