@@ -28,8 +28,8 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y npm
           npm install --global yarn
-          # Skip UI build to save time and RAM
-          mvn clean install -DskipTests -Dui.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Pdeb -pl '!ui-ngx'
+          # Fixed Maven command
+          mvn clean install -DskipTests -Dui.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dlicense.skip=true -P build-docker -pl '!ui-ngx'
           ls -lh ./application/target/*.deb
 
       - name: Log in to GHCR
@@ -63,5 +63,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             TB_DEB=../../application/target/thingsboard-4.2*.deb
-          # Copy the prebuilt .deb into build context
-          load: false
