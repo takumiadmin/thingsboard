@@ -24,13 +24,29 @@ jobs:
           distribution: "temurin"
           cache: maven
 
-      - name: Build ThingsBoard .deb package
+      - name: Set up Node and Yarn
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'yarn'
+          cache-dependency-path: ui-ngx/yarn.lock
+
+      - name: Build ThingsBoard backend & UI
         run: |
           sudo apt-get update && sudo apt-get install -y npm
           npm install --global yarn
-          # Fixed Maven command
-          mvn clean install -DskipTests -Dui.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dlicense.skip=true -P build-docker -pl '!ui-ngx'
-          ls -lh ./application/target/*.deb
+
+          # Build UI first (for ui-ngx.jar)
+          cd ui-ngx
+          yarn install --frozen-lockfile
+          yarn build:prod
+          cd ..
+
+          # Build backend now (uses local ui-ngx.jar)
+          mvn clean install -DskipTests -Dlicense.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dskip-web=true
+          
+          # Show artifacts
+          ls -lh application/target/
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
