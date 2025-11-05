@@ -36,28 +36,31 @@ jobs:
           sudo apt-get update && sudo apt-get install -y npm
           npm install --global yarn
 
-          # --- Build UI first ---
+          # Build UI first
           cd ui-ngx
           yarn install --frozen-lockfile
           yarn build:prod
           cd ..
 
-          # --- Build backend ---
-          mvn clean install -DskipTests -Dlicense.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dskip-web=true
-          
-          echo "List artifacts:"
+          # Build backend
+          mvn clean package -DskipTests -Dlicense.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dskip-web=true
+
+          echo "Artifacts produced:"
           ls -lh application/target/
 
-      - name: Patch Dockerfile for direct build
+      - name: Patch Dockerfile for jar-based build
         run: |
-          # Find the built .deb file
-          DEB_FILE=$(ls application/target/thingsboard-*.deb | head -n1 | xargs -n1 basename)
-          echo "Detected deb file: $DEB_FILE"
+          # Find built jar
+          JAR_FILE=$(ls application/target/thingsboard-*.jar | head -n1 | xargs -n1 basename)
+          echo "Detected JAR: $JAR_FILE"
 
-          # Replace ${pkg.name}.deb with actual filename in Dockerfile
-          sed -i "s|\${pkg.name}.deb|${DEB_FILE}|g" msa/tb-node/docker/Dockerfile
+          # Copy jar into docker context directory
+          cp application/target/$JAR_FILE msa/tb-node/docker/
 
-          echo "Patched Dockerfile:"
+          # Replace .deb reference with jar filename
+          sed -i "s|\${pkg.name}.deb|${JAR_FILE}|g" msa/tb-node/docker/Dockerfile
+
+          echo "Updated COPY line in Dockerfile:"
           grep COPY msa/tb-node/docker/Dockerfile
 
       - name: Log in to GHCR
