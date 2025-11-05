@@ -76,7 +76,10 @@ jobs:
           FROM eclipse-temurin:17-jdk-jammy
 
           # Create ThingsBoard directories
-          RUN mkdir -p /usr/share/thingsboard/bin /usr/share/thingsboard/conf
+          RUN mkdir -p /usr/share/thingsboard/bin /usr/share/thingsboard/conf /usr/share/thingsboard/bin/install \
+           && echo '<configuration><appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender"><encoder><pattern>%d %-5level %logger - %msg%n</pattern></encoder></appender><root level="INFO"><appender-ref ref="STDOUT"/></root></configuration>' \
+              > /usr/share/thingsboard/bin/install/logback.xml
+
 
           WORKDIR /usr/share/thingsboard
 
