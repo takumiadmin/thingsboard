@@ -69,9 +69,19 @@ jobs:
 
           mkdir -p docker-build/ui
 
-          # The real built UI is packaged into the backend's static resources
-          echo "Copying built UI from application/src/main/resources/static/"
-          cp -r application/src/main/resources/static/* docker-build/ui/
+          echo "Copying built UI from Maven-generated resources..."
+          if [ -d "application/target/generated-resources/public" ]; then
+            cp -r application/target/generated-resources/public/* docker-build/ui/
+            echo "✅ Copied UI from application/target/generated-resources/public/"
+          elif [ -d "ui-ngx/dist" ]; then
+            cp -r ui-ngx/dist/*/* docker-build/ui/ 2>/dev/null || cp -r ui-ngx/dist/* docker-build/ui/
+            echo "✅ Fallback: Copied UI from ui-ngx/dist/"
+          else
+            echo "❌ ERROR: UI build not found in either path."
+            echo "Current directory contents:"
+            ls -R | head -n 40
+            exit 1
+          fi
 
           # Create Dockerfile based on official ThingsBoard image
           cat > docker-build/Dockerfile <<'EOF'
