@@ -1,4 +1,4 @@
-name: Build & Push tb-node (lts-4.2)
+name: 🧱 Build & Push ThingsBoard (lts-4.2)
 
 on:
   push:
@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout
+      - name: Checkout source
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
@@ -33,17 +33,23 @@ jobs:
           cache: 'yarn'
           cache-dependency-path: ui-ngx/yarn.lock
 
-      - name: Build ThingsBoard backend & UI
+      - name: Build ThingsBoard backend & UI manually
         run: |
           sudo apt-get update && sudo apt-get install -y npm
           npm install --global yarn
 
-          # Maven will automatically build the UI (no need to call yarn build manually)
-          mvn clean package -DskipTests -Dlicense.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true
+          # --- Build the Angular frontend ---
+          cd ui-ngx
+          yarn install --frozen-lockfile
+          yarn build:prod
+          cd ..
 
-          echo "✅ Build finished. Checking for UI output..."
-          find application/target -type d | grep generated-resources || true
+          # --- Build the Java backend ---
+          mvn clean package -DskipTests -Dlicense.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dskip-web=true
+
+          echo "✅ Build finished"
           ls -lh application/target/thingsboard-*.jar
+          echo "✅ UI built at ui-ngx/dist/"
 
       - name: Prepare Docker context
         run: |
@@ -51,16 +57,7 @@ jobs:
           echo "Detected JAR: $JAR_FILE"
 
           mkdir -p docker-build/ui
-
-          if [ -d "application/target/generated-resources/public" ]; then
-            cp -r application/target/generated-resources/public/* docker-build/ui/
-            echo "✅ Copied UI from application/target/generated-resources/public/"
-          else
-            echo "❌ ERROR: UI build not found even after Maven packaging."
-            echo "Directory tree under application/target/:"
-            ls -R application/target | head -n 60
-            exit 1
-          fi
+          cp -r ui-ngx/dist/* docker-build/ui/
 
           cat > docker-build/Dockerfile <<'EOF'
           FROM thingsboard/tb-postgres:4.2.1
@@ -79,13 +76,12 @@ jobs:
 
           cp "$JAR_FILE" docker-build/thingsboard.jar
 
-          echo "✅ Docker context prepared successfully:"
+          echo "✅ Docker context ready:"
           du -sh docker-build
-          ls -R docker-build | head -n 30
+          ls -R docker-build | head -n 25
 
-      - name: Clean up workspace before Docker build
+      - name: Clean workspace before Docker build
         run: |
-          echo "Freeing disk space..."
           sudo rm -rf ~/.m2/repository || true
           sudo docker system prune -af || true
           df -h
