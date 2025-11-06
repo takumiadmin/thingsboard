@@ -68,7 +68,8 @@ jobs:
 
           # Copy UI build
           mkdir -p docker-build/ui
-          cp -r ui-ngx/dist/* docker-build/ui/
+          cp -r ui-ngx/dist/*/* docker-build/ui/ 2>/dev/null || cp -r ui-ngx/dist/* docker-build/ui/
+
 
           # Create Dockerfile based on official ThingsBoard image
           cat > docker-build/Dockerfile <<'EOF'
