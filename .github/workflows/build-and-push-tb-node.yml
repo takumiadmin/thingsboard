@@ -41,13 +41,14 @@ jobs:
           # Build UI first
           cd ui-ngx
           yarn install --frozen-lockfile
-          yarn build:prod
+          yarn build:prod || { echo "UI build failed"; exit 1; }
+          echo "✅ UI build finished. Dist contents:"
+          find dist -maxdepth 2 -type d || true
           cd ..
 
           # Build backend
           mvn clean package -DskipTests -Dlicense.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dskip-web=true
-
-          echo "Artifacts produced:"
+          echo "✅ Backend build finished. Artifacts:"
           ls -lh application/target/
       - name: Patch start-tb-node.sh placeholders
         run: |
@@ -62,38 +63,33 @@ jobs:
 
       - name: Prepare Docker context
         run: |
-          # Locate built JAR
           JAR_FILE=$(ls application/target/thingsboard-*.jar | head -n1)
           echo "Detected JAR: $JAR_FILE"
 
-          # Copy UI build
           mkdir -p docker-build/ui
-          cp -r ui-ngx/dist/*/* docker-build/ui/ 2>/dev/null || cp -r ui-ngx/dist/* docker-build/ui/
 
+          echo "🔍 Checking UI build output..."
+          if [ -d "ui-ngx/dist" ]; then
+            echo "Found dist folder. Copying..."
+            cp -r ui-ngx/dist/*/* docker-build/ui/ 2>/dev/null || cp -r ui-ngx/dist/* docker-build/ui/
+          else
+            echo "❌ ERROR: No dist folder found in ui-ngx/. Please verify the UI build step."
+            ls -R ui-ngx || true
+            exit 1
+          fi
 
-          # Create Dockerfile based on official ThingsBoard image
           cat > docker-build/Dockerfile <<'EOF'
           FROM thingsboard/tb-postgres:4.2.1
-
-          # Replace backend JAR
           COPY thingsboard.jar /usr/share/thingsboard/bin/thingsboard.jar
-
-          # Replace frontend UI
           COPY ui/ /usr/share/thingsboard/ui/
-
-          RUN chmod -R 755 /usr/share/thingsboard && \
-              echo "Custom TB build - includes patched backend & UI"
-
+          RUN chmod -R 755 /usr/share/thingsboard && echo "Custom TB build - includes patched backend & UI"
           ENTRYPOINT ["/usr/share/thingsboard/bin/docker-entrypoint.sh"]
           EOF
 
-          # Copy the JAR into context
           cp "$JAR_FILE" docker-build/thingsboard.jar
-
-          echo "Docker context prepared:"
+          echo "✅ Docker context ready:"
           du -sh docker-build
           ls -R docker-build | head -n 30
-
       - name: Clean up workspace before Docker build
         run: |
           echo "Freeing disk space..."
