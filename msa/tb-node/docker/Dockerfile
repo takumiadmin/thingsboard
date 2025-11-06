@@ -14,20 +14,33 @@
 # limitations under the License.
 #
 
-FROM thingsboard/openjdk17:bookworm-slim
+# --- Stage 1: Build custom UI ---
+FROM node:20 AS ui-builder
+WORKDIR /app
 
-COPY logback.xml start-tb-node.sh ${pkg.name}.deb /tmp/
+# Copy UI source code
+COPY ui-ngx/ ./ui-ngx/
+WORKDIR /app/ui-ngx
 
-RUN chmod a+x /tmp/*.sh \
-    && mv /tmp/start-tb-node.sh /usr/bin && \
-    (yes | dpkg -i /tmp/${pkg.name}.deb) && \
-    rm /tmp/${pkg.name}.deb && \
-    mv /tmp/logback.xml ${pkg.installFolder}/conf && \
-    chown -R ${pkg.user}:${pkg.user} ${pkg.installFolder}/conf/logback.xml && \
-    (systemctl --no-reload disable --now ${pkg.name}.service > /dev/null 2>&1 || :) && \
-    chown -R ${pkg.user}:${pkg.user} /tmp && \
-    chmod 555 ${pkg.installFolder}/bin/${pkg.name}.jar
+# Build the custom UI (e.g., after you changed colors/logos)
+RUN npm install --legacy-peer-deps && npm run build -- --output-path=dist
 
-USER ${pkg.user}
+# --- Stage 2: Build backend (optional) ---
+# If you make backend changes, uncomment this stage:
+# FROM maven:3.9-eclipse-temurin-17 AS backend-builder
+# WORKDIR /app
+# COPY . .
+# RUN mvn clean install -DskipTests
 
-CMD ["start-tb-node.sh"]
+# --- Stage 3: Final Image ---
+FROM thingsboard/tb-postgres:4.2.1
+
+# Copy custom UI into the official TB location
+COPY --from=ui-builder /app/ui-ngx/dist/ /usr/share/thingsboard/ui/
+
+# (Optional) If backend was rebuilt:
+# COPY --from=backend-builder /app/application/target/thingsboard*.jar /usr/share/thingsboard/bin/thingsboard.jar
+
+RUN chmod -R 755 /usr/share/thingsboard
+
+ENTRYPOINT ["/usr/share/thingsboard/bin/docker-entrypoint.sh"]
