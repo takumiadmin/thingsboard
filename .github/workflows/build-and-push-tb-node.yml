@@ -33,31 +33,74 @@ jobs:
           cache: 'yarn'
           cache-dependency-path: ui-ngx/yarn.lock
 
-      - name: Build ThingsBoard backend & UI manually
+      - name: Build TB backend & UI (robust)
         run: |
+          set -euo pipefail
+
           sudo apt-get update && sudo apt-get install -y npm
           npm install --global yarn
 
-          # --- Build the Angular frontend ---
-          cd ui-ngx
-          yarn install --frozen-lockfile
-          yarn build:prod
-          cd ..
+          echo "=== Build Angular UI with Yarn ==="
+          pushd ui-ngx
+          # Some forks require --legacy-peer-deps; try strict first, then relax if needed.
+          (yarn install --frozen-lockfile) || yarn install --no-lockfile
+          # Try the usual scripts in order
+          if yarn run -s build:prod; then
+            echo "UI built via yarn build:prod"
+          elif yarn run -s build; then
+            echo "UI built via yarn build"
+          else
+            echo "⚠️  Yarn build scripts not found or failed; will rely on Maven web build."
+          fi
+          popd
 
-          # --- Build the Java backend ---
-          mvn clean package -DskipTests -Dlicense.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dskip-web=true
+          echo "=== Build Java backend with Maven (allow web build) ==="
+          # Do NOT set -Dskip-web=true so Maven can generate 'target/generated-resources/public' if wired.
+          mvn -q -e clean package -DskipTests -Dlicense.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true
 
-          echo "✅ Build finished"
-          ls -lh application/target/thingsboard-*.jar
-          echo "✅ UI built at ui-ngx/dist/"
+          echo "Artifacts produced:"
+          ls -lh application/target/thingsboard-*.jar || true
+          echo "UI candidates (if present):"
+          ls -ld ui-ngx/dist || true
+          ls -ld ui-ngx/target/generated-resources/public || true
+          ls -ld application/src/main/resources/static || true
 
-      - name: Prepare Docker context
+      - name: Prepare Docker context (auto-detect UI output)
         run: |
-          JAR_FILE=$(ls application/target/thingsboard-*.jar | head -n1)
+          set -euo pipefail
+
+          JAR_FILE="$(ls application/target/thingsboard-*.jar | head -n1)"
           echo "Detected JAR: $JAR_FILE"
 
+          # Detect UI build location in priority order
+          declare -a CANDIDATES=(
+            "ui-ngx/dist"
+            "ui-ngx/target/generated-resources/public"
+            "application/src/main/resources/static"
+          )
+
+          UI_DIR=""
+          for p in "${CANDIDATES[@]}"; do
+            if [ -d "$p" ] && [ -n "$(find "$p" -type f -maxdepth 3 | head -n1 || true)" ]; then
+              UI_DIR="$p"
+              break
+            fi
+          done
+
+          if [ -z "$UI_DIR" ]; then
+            echo "❌ ERROR: UI build not found in any known path."
+            echo "Project tree (top levels) to help debug:"
+            ls -la
+            echo "ui-ngx tree (top 2 levels):"
+            find ui-ngx -maxdepth 2 -type d -print
+            exit 1
+          fi
+
+          echo "✅ Using UI from: $UI_DIR"
+
           mkdir -p docker-build/ui
-          cp -r ui-ngx/dist/* docker-build/ui/
+          # Copy files preserving structure
+          rsync -a "$UI_DIR"/ docker-build/ui/
 
           cat > docker-build/Dockerfile <<'EOF'
           FROM thingsboard/tb-postgres:4.2.1
@@ -65,11 +108,11 @@ jobs:
           # Replace backend JAR
           COPY thingsboard.jar /usr/share/thingsboard/bin/thingsboard.jar
 
-          # Replace frontend UI
+          # Replace frontend UI (static assets)
           COPY ui/ /usr/share/thingsboard/ui/
 
           RUN chmod -R 755 /usr/share/thingsboard && \
-              echo "Custom TB build - includes patched backend & UI"
+              echo "Custom TB build - patched backend & UI"
 
           ENTRYPOINT ["/usr/share/thingsboard/bin/docker-entrypoint.sh"]
           EOF
@@ -77,8 +120,8 @@ jobs:
           cp "$JAR_FILE" docker-build/thingsboard.jar
 
           echo "✅ Docker context ready:"
-          du -sh docker-build
-          ls -R docker-build | head -n 25
+          du -sh docker-build || true
+          find docker-build -maxdepth 2 -type f | head -n 30
 
       - name: Clean workspace before Docker build
         run: |
