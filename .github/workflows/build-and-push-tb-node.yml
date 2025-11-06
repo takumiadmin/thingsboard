@@ -121,7 +121,12 @@ jobs:
 
           echo "✅ Docker context ready:"
           du -sh docker-build || true
-          find docker-build -maxdepth 2 -type f | head -n 30
+
+          # Disable pipefail temporarily to avoid SIGPIPE error when head closes early
+          set +o pipefail
+          find docker-build -maxdepth 2 -type f | head -n 30 || true
+          set -o pipefail
+
 
       - name: Clean workspace before Docker build
         run: |
