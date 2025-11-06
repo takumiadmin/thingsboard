@@ -111,8 +111,8 @@ jobs:
           # Replace frontend UI (static assets)
           COPY ui/ /usr/share/thingsboard/ui/
 
-          RUN chmod -R 755 /usr/share/thingsboard && \
-              echo "Custom TB build - patched backend & UI"
+          RUN chmod 555 /usr/share/thingsboard/bin/thingsboard.jar && \
+              echo "✅ Custom TB build - patched backend & UI"
 
           ENTRYPOINT ["/usr/share/thingsboard/bin/docker-entrypoint.sh"]
           EOF
