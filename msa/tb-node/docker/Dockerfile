@@ -14,33 +14,20 @@
 # limitations under the License.
 #
 
-# --- Stage 1: Build custom UI ---
+# --- Stage 1: Build custom UI (optional, safe to keep even if no UI changes) ---
 FROM node:20 AS ui-builder
 WORKDIR /app
-
-# Copy UI source code
 COPY ui-ngx/ ./ui-ngx/
 WORKDIR /app/ui-ngx
-
-# Build the custom UI (e.g., after you changed colors/logos)
 RUN npm install --legacy-peer-deps && npm run build -- --output-path=dist
 
-# --- Stage 2: Build backend (optional) ---
-# If you make backend changes, uncomment this stage:
-# FROM maven:3.9-eclipse-temurin-17 AS backend-builder
-# WORKDIR /app
-# COPY . .
-# RUN mvn clean install -DskipTests
-
-# --- Stage 3: Final Image ---
+# --- Stage 2: Final image from official stable ThingsBoard CE ---
 FROM thingsboard/tb-postgres:4.2.1
 
-# Copy custom UI into the official TB location
+# Copy your built custom UI into the ThingsBoard UI directory
 COPY --from=ui-builder /app/ui-ngx/dist/ /usr/share/thingsboard/ui/
 
-# (Optional) If backend was rebuilt:
-# COPY --from=backend-builder /app/application/target/thingsboard*.jar /usr/share/thingsboard/bin/thingsboard.jar
-
+# Permissions just in case
 RUN chmod -R 755 /usr/share/thingsboard
 
 ENTRYPOINT ["/usr/share/thingsboard/bin/docker-entrypoint.sh"]
