@@ -63,33 +63,39 @@ jobs:
 
       - name: Prepare Docker context
         run: |
+          # Locate built JAR
           JAR_FILE=$(ls application/target/thingsboard-*.jar | head -n1)
           echo "Detected JAR: $JAR_FILE"
 
           mkdir -p docker-build/ui
 
-          echo "🔍 Checking UI build output..."
-          if [ -d "ui-ngx/dist" ]; then
-            echo "Found dist folder. Copying..."
-            cp -r ui-ngx/dist/*/* docker-build/ui/ 2>/dev/null || cp -r ui-ngx/dist/* docker-build/ui/
-          else
-            echo "❌ ERROR: No dist folder found in ui-ngx/. Please verify the UI build step."
-            ls -R ui-ngx || true
-            exit 1
-          fi
+          # The real built UI is packaged into the backend's static resources
+          echo "Copying built UI from application/src/main/resources/static/"
+          cp -r application/src/main/resources/static/* docker-build/ui/
 
+          # Create Dockerfile based on official ThingsBoard image
           cat > docker-build/Dockerfile <<'EOF'
           FROM thingsboard/tb-postgres:4.2.1
+
+          # Replace backend JAR
           COPY thingsboard.jar /usr/share/thingsboard/bin/thingsboard.jar
+
+          # Replace frontend UI
           COPY ui/ /usr/share/thingsboard/ui/
-          RUN chmod -R 755 /usr/share/thingsboard && echo "Custom TB build - includes patched backend & UI"
+
+          RUN chmod -R 755 /usr/share/thingsboard && \
+              echo "Custom TB build - includes patched backend & UI"
+
           ENTRYPOINT ["/usr/share/thingsboard/bin/docker-entrypoint.sh"]
           EOF
 
+          # Copy the JAR into context
           cp "$JAR_FILE" docker-build/thingsboard.jar
-          echo "✅ Docker context ready:"
+
+          echo "✅ Docker context prepared successfully:"
           du -sh docker-build
           ls -R docker-build | head -n 30
+
       - name: Clean up workspace before Docker build
         run: |
           echo "Freeing disk space..."
