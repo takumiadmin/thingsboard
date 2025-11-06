@@ -102,7 +102,7 @@ jobs:
           # Copy files preserving structure
           rsync -a "$UI_DIR"/ docker-build/ui/
 
-          cat > docker-build/Dockerfile <<'EOF'
+          at > docker-build/Dockerfile <<'EOF'
           FROM thingsboard/tb-postgres:4.2.1
 
           # Replace backend JAR
@@ -111,11 +111,12 @@ jobs:
           # Replace frontend UI (static assets)
           COPY ui/ /usr/share/thingsboard/ui/
 
-          RUN chmod 555 /usr/share/thingsboard/bin/thingsboard.jar && \
-              echo "✅ Custom TB build - patched backend & UI"
+          # Skip chmod — base image permissions are already correct
+          RUN echo "✅ Custom TB build - patched backend & UI"
 
           ENTRYPOINT ["/usr/share/thingsboard/bin/docker-entrypoint.sh"]
           EOF
+
 
           cp "$JAR_FILE" docker-build/thingsboard.jar
 
