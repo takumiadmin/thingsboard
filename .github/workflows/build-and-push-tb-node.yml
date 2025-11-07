@@ -33,7 +33,7 @@ jobs:
         with:
           java-version: "17"
           distribution: "temurin"
-          cache: maven
+          cache: none
 
       - name: Set up Node 18 + Yarn
         uses: actions/setup-node@v4
@@ -46,6 +46,17 @@ jobs:
         run: |
           ( while true; do echo "🟢 build keepalive $(date -u)"; sleep 55; done ) &
           echo $! > keepalive.pid
+            - name: Free up space on runner
+        run: |
+          echo "🧹 Cleaning disk space..."
+          sudo rm -rf /opt/hostedtoolcache/* || true
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /usr/local/share/boost || true
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY" || true
+          sudo apt-get clean
+          sudo docker system prune -af || true
+          df -h
 
       - name: Build UI and Backend
         shell: bash
@@ -61,6 +72,9 @@ jobs:
           # prod build emits into target/generated-resources/public for TB 4.2.x
           yarn build:prod
           cd ..
+          echo "Cleaning node_modules to free space..."
+          sudo rm -rf ui-ngx/node_modules || true
+          df -h
 
           echo "=== Building backend (Maven) ==="
           mvn clean package $MAVEN_ARGS
@@ -126,7 +140,7 @@ jobs:
             docker buildx build \
               --progress=plain \
               --pull \
-              --no-cache=false \
+              --no-cache \
               --provenance=false \
               --sbom=false \
               --cache-from=type=gha \
