@@ -33,7 +33,7 @@ jobs:
         with:
           java-version: "17"
           distribution: "temurin"
-          cache: none
+
 
       - name: Set up Node 18 + Yarn
         uses: actions/setup-node@v4
