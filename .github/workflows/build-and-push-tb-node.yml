@@ -165,16 +165,20 @@ jobs:
       - name: Wait for image to be available
         run: sleep 30
       - name: Deploy to EC2
-        uses: appleboy/ssh-action@v0.1.7
+        uses: appleboy/ssh-action@master
         with:
           host: 3.109.229.211
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
+          script_stop: true
+          command_timeout: 30m
           script: |
-            echo "Pulling latest image from GHCR..."
+            echo "🚀 Pulling latest image from GHCR and redeploying..."
             cd /opt/thingsboard
             sudo docker compose pull
             sudo docker compose up -d
             sudo docker image prune -f
+            echo "✅ Deployment completed successfully!"
+
 
 
