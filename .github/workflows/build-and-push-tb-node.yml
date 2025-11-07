@@ -118,7 +118,7 @@ jobs:
           COPY thingsboard.jar /usr/share/thingsboard/bin/thingsboard.jar
           COPY ui/ /usr/share/thingsboard/ui/
           RUN echo "✅ Custom TB build - patched backend & UI"
-          ENTRYPOINT ["/usr/share/thingsboard/bin/docker-entrypoint.sh"]
+          ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
           EOF
 
 
