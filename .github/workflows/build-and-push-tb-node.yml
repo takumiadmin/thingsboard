@@ -12,6 +12,15 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      # Keep memory under control on GitHub runners
+      NODE_OPTIONS: --max-old-space-size=2048
+      MAVEN_OPTS: -Xmx2048m -XX:+UseParallelGC
+      # Make Maven quieter & faster
+      MAVEN_ARGS: -DskipTests -Dlicense.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dskip-web=true -T 1C
+      # Tell Docker buildx to use GHA cache
+      DOCKER_BUILDKIT: "1"
 
     steps:
       - name: Checkout
@@ -26,82 +35,104 @@ jobs:
           distribution: "temurin"
           cache: maven
 
-      - name: Set up Node and Yarn
+      - name: Set up Node 18 + Yarn
         uses: actions/setup-node@v4
         with:
           node-version: 18
           cache: yarn
           cache-dependency-path: ui-ngx/yarn.lock
 
-      - name: Build UI and Backend
+      - name: Keepalive (prevent 10-min log silence)
         run: |
-          sudo apt-get update && sudo apt-get install -y npm
+          ( while true; do echo "🟢 build keepalive $(date -u)"; sleep 55; done ) &
+          echo $! > keepalive.pid
+
+      - name: Build UI and Backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y npm
           npm install --global yarn
 
-          echo "=== Building UI ==="
+          echo "=== Building UI (Angular) ==="
           cd ui-ngx
           yarn install --frozen-lockfile
+          # prod build emits into target/generated-resources/public for TB 4.2.x
           yarn build:prod
           cd ..
 
-          echo "=== Building backend ==="
-          mvn clean package -DskipTests -Dlicense.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dskip-web=true
+          echo "=== Building backend (Maven) ==="
+          mvn clean package $MAVEN_ARGS
 
           echo "Artifacts in application/target:"
-          ls -lh application/target/
+          ls -lh application/target | sed -n '1,80p'
 
       - name: Prepare Docker context
+        shell: bash
         run: |
           set -euo pipefail
 
-          JAR_FILE=$(ls application/target/thingsboard-*.jar | head -n1)
+          JAR_FILE=$(ls application/target/thingsboard-*-boot.jar | head -n1)
           echo "Detected JAR: $JAR_FILE"
 
           UI_PATH="ui-ngx/target/generated-resources/public"
-          if [ -d "$UI_PATH" ]; then
-            echo "✅ Using UI from: $UI_PATH"
-          else
-            echo "❌ UI path not found"
+          if [ ! -d "$UI_PATH" ]; then
+            echo "❌ UI build not found at $UI_PATH"
+            kill $(cat keepalive.pid) || true
             exit 1
           fi
+          echo "✅ Using UI from: $UI_PATH"
 
+          # Minimal context, no giant listings
+          rm -rf docker-build
           mkdir -p docker-build/ui
           cp -r "$UI_PATH"/* docker-build/ui/
           cp "$JAR_FILE" docker-build/thingsboard.jar
 
-          # Generate final Dockerfile
           cat > docker-build/Dockerfile <<'EOF'
           FROM thingsboard/tb-postgres:4.2.1
+          # Replace backend JAR and UI. Do NOT chmod read-only files.
           COPY thingsboard.jar /usr/share/thingsboard/bin/thingsboard.jar
           COPY ui/ /usr/share/thingsboard/ui/
           RUN echo "✅ Custom TB build - patched backend & UI"
           ENTRYPOINT ["/usr/share/thingsboard/bin/docker-entrypoint.sh"]
           EOF
 
-          echo "✅ Docker context ready:"
+          echo "Docker context size:"
           du -sh docker-build || true
-          set +o pipefail
-          find docker-build -maxdepth 2 -type f | head -n 30 || true
-          set -o pipefail
+
+      - name: Stop keepalive (pre-docker)
+        run: |
+          kill $(cat keepalive.pid) || true
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: takumiadmin
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_PAT }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build & Push Docker image
-        uses: docker/build-push-action@v5
+      # Retry wrapper for network flakes during build/push
+      - name: Build & Push Docker image (with cache + retry)
+        uses: nick-fields/retry@v3
         with:
-          context: docker-build
-          file: docker-build/Dockerfile
-          push: true
-          pull: true
-          no-cache: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/tb-node:latest
-            ghcr.io/${{ github.repository_owner }}/tb-node:lts-4.2
+          timeout_minutes: 40
+          max_attempts: 3
+          command: |
+            docker buildx build \
+              --progress=plain \
+              --pull \
+              --no-cache=false \
+              --provenance=false \
+              --sbom=false \
+              --cache-from=type=gha \
+              --cache-to=type=gha,mode=max \
+              --platform linux/amd64 \
+              -t ghcr.io/${{ github.repository_owner }}/tb-node:latest \
+              -t ghcr.io/${{ github.repository_owner }}/tb-node:lts-4.2 \
+              --push \
+              docker-build
