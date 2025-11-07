@@ -113,12 +113,14 @@ jobs:
           cp "$JAR_FILE" docker-build/thingsboard.jar
 
           cat > docker-build/Dockerfile <<'EOF'
-          FROM thingsboard/tb-postgres:4.2.1
+          FROM thingsboard/tb-node:4.2.1
+          # Replace backend JAR and UI
           COPY thingsboard.jar /usr/share/thingsboard/bin/thingsboard.jar
           COPY ui/ /usr/share/thingsboard/ui/
           RUN echo "✅ Custom TB build - patched backend & UI"
           ENTRYPOINT ["/usr/share/thingsboard/bin/docker-entrypoint.sh"]
           EOF
+
 
           echo "Docker context size:"
           du -sh docker-build || true
