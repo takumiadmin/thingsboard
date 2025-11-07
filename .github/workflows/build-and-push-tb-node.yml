@@ -32,12 +32,19 @@ jobs:
           distribution: "temurin"
           cache: "maven"
 
+      - name: Install Maven
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y maven
+          mvn -v
+
       - name: Set up Node 18 + Yarn
         uses: actions/setup-node@v4
         with:
           node-version: 18
           cache: yarn
           cache-dependency-path: ui-ngx/yarn.lock
+
 
       - name: Keepalive (prevent 10-min log silence)
         run: |
