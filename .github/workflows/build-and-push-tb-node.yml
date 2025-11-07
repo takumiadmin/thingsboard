@@ -46,7 +46,7 @@ jobs:
         run: |
           ( while true; do echo "🟢 build keepalive $(date -u)"; sleep 55; done ) &
           echo $! > keepalive.pid
-            - name: Free up space on runner
+      - name: Free up space on runner
         run: |
           echo "🧹 Cleaning disk space..."
           sudo rm -rf /opt/hostedtoolcache/* || true
