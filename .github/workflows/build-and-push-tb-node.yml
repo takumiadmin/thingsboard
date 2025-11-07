@@ -14,12 +14,9 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 90
     env:
-      # Keep memory under control on GitHub runners
       NODE_OPTIONS: --max-old-space-size=2048
       MAVEN_OPTS: -Xmx2048m -XX:+UseParallelGC
-      # Make Maven quieter & faster
       MAVEN_ARGS: -DskipTests -Dlicense.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dskip-web=true -T 1C
-      # Tell Docker buildx to use GHA cache
       DOCKER_BUILDKIT: "1"
 
     steps:
@@ -33,7 +30,7 @@ jobs:
         with:
           java-version: "17"
           distribution: "temurin"
-
+          cache: "maven"
 
       - name: Set up Node 18 + Yarn
         uses: actions/setup-node@v4
@@ -46,22 +43,27 @@ jobs:
         run: |
           ( while true; do echo "🟢 build keepalive $(date -u)"; sleep 55; done ) &
           echo $! > keepalive.pid
+
       - name: Free up space on runner
         run: |
           echo "🧹 Cleaning disk space..."
-          sudo rm -rf /opt/hostedtoolcache/* || true
-          sudo rm -rf /usr/share/dotnet || true
-          sudo rm -rf /usr/local/lib/android || true
-          sudo rm -rf /usr/local/share/boost || true
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY" || true
+          sudo rm -rf /opt/hostedtoolcache/* /usr/share/dotnet /usr/local/lib/android /usr/local/share/boost || true
           sudo apt-get clean
           sudo docker system prune -af || true
           df -h
 
       - name: Build UI and Backend
         shell: bash
+        env:
+          JAVA_HOME: /usr/lib/jvm/temurin-17-jdk-amd64
+          PATH: /usr/lib/jvm/temurin-17-jdk-amd64/bin:${{ env.PATH }}
         run: |
           set -euo pipefail
+          echo "JAVA_HOME check:"
+          echo "$JAVA_HOME"
+          java -version
+          mvn -v
+
           sudo apt-get update -y
           sudo apt-get install -y npm
           npm install --global yarn
@@ -69,7 +71,6 @@ jobs:
           echo "=== Building UI (Angular) ==="
           cd ui-ngx
           yarn install --frozen-lockfile
-          # prod build emits into target/generated-resources/public for TB 4.2.x
           yarn build:prod
           cd ..
           echo "Cleaning node_modules to free space..."
@@ -77,7 +78,6 @@ jobs:
           df -h
 
           echo "=== Building backend (Maven) ==="
-          export JAVA_HOME=${JAVA_HOME:-/usr/lib/jvm/temurin-17-jdk-amd64}
           mvn clean package $MAVEN_ARGS
 
           echo "Artifacts in application/target:"
@@ -99,7 +99,6 @@ jobs:
           fi
           echo "✅ Using UI from: $UI_PATH"
 
-          # Minimal context, no giant listings
           rm -rf docker-build
           mkdir -p docker-build/ui
           cp -r "$UI_PATH"/* docker-build/ui/
@@ -107,7 +106,6 @@ jobs:
 
           cat > docker-build/Dockerfile <<'EOF'
           FROM thingsboard/tb-postgres:4.2.1
-          # Replace backend JAR and UI. Do NOT chmod read-only files.
           COPY thingsboard.jar /usr/share/thingsboard/bin/thingsboard.jar
           COPY ui/ /usr/share/thingsboard/ui/
           RUN echo "✅ Custom TB build - patched backend & UI"
@@ -131,7 +129,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Retry wrapper for network flakes during build/push
       - name: Build & Push Docker image (with cache + retry)
         uses: nick-fields/retry@v3
         with:
