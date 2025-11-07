@@ -77,6 +77,7 @@ jobs:
           df -h
 
           echo "=== Building backend (Maven) ==="
+          export JAVA_HOME=${JAVA_HOME:-/usr/lib/jvm/temurin-17-jdk-amd64}
           mvn clean package $MAVEN_ARGS
 
           echo "Artifacts in application/target:"
