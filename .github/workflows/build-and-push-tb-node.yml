@@ -169,8 +169,7 @@ jobs:
         with:
           host: 3.109.229.211
           username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script_stop: true
+          key: ${{ secrets.EC2_SSH_KEY }}          
           command_timeout: 30m
           script: |
             echo "🚀 Pulling latest image from GHCR and redeploying..."
