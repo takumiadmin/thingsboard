@@ -43,7 +43,7 @@
         white-space: nowrap;
         border-bottom: 1px solid rgba(0, 0, 0, .12);
 
-        &>div {
+        & > div {
           height: 64px;
 
           .tb-logo-title {
@@ -78,29 +78,60 @@
     position: relative;
   }
 
+  /* ----------------------- BRANDING & ALIGNMENT ----------------------- */
+
+  /* Sidebar header container override */
+  .custom-sidebar-header {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 12px !important;
+    min-height: 64px !important;
+  }
+
+  .sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  /* Logo: use a white circular background to ensure contrast on red */
   .custom-logo {
-    height: 32px;
-    width: auto;
+    height: 36px;
+    width: 36px;
+    object-fit: contain;
+    background: #ffffff;
+    border-radius: 50%;
+    padding: 4px;
   }
 
+  /* Sidebar title */
   .custom-title {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 600;
-    color: white;
+    color: #ffffff;
   }
 
+  /* Top toolbar branding container */
   .custom-top-title {
-    margin-left: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: 12px;
   }
 
   .topbar-logo {
-    height: 26px;
-    width: auto;
+    height: 32px;
+    width: 32px;
+    object-fit: contain;
+    background: #ffffff;
+    border-radius: 50%;
+    padding: 4px;
   }
 
   .topbar-title {
     font-size: 18px;
     font-weight: 600;
-    color: white;
+    color: #ffffff;
   }
 }

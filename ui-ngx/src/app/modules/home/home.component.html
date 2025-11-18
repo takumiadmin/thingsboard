@@ -19,8 +19,8 @@
   <mat-sidenav #sidenav class="tb-site-sidenav mat-elevation-z2" [disableClose]="sidenavOpened"
     (click)="sidenavClicked()" [mode]="sidenavMode" [opened]="sidenavOpened && !forceFullscreen">
     <header class="tb-nav-header">
-      <mat-toolbar color="primary" class="tb-nav-header-toolbar">
-        <div class="flex flex-auto">
+      <mat-toolbar color="primary" class="tb-nav-header-toolbar custom-sidebar-header">
+        <div class="flex flex-auto sidebar-brand">
           <!-- <img [src]="logo"
                aria-label="logo" class="tb-logo-title"/> -->
           <img src="assets/tmc.png" aria-label="logo" class="tb-logo-title custom-logo" />
@@ -39,6 +39,7 @@
           (click)="sidenav.toggle()">
           <mat-icon class="material-icons">menu</mat-icon>
         </button>
+
         <div class="flex items-center gap-2 custom-top-title">
           <img src="assets/tmc.png" class="topbar-logo" />
           <span class="topbar-title">Takumi Mirai Board</span>
