@@ -1,18 +1,7 @@
 /**
  * Copyright © 2016-2025 The Thingsboard Authors
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
  */
+
 :host {
   display: flex;
   width: 100%;
@@ -32,28 +21,13 @@
     .tb-nav-header {
       z-index: 2;
       flex-shrink: 0;
-      white-space: nowrap;
 
       .tb-nav-header-toolbar {
-        min-height: 64px;
-        height: inherit;
-        padding: 0;
-        z-index: 2;
-        flex-shrink: 0;
-        white-space: nowrap;
-        border-bottom: 1px solid rgba(0, 0, 0, .12);
-
-        & > div {
-          height: 64px;
-
-          .tb-logo-title {
-            width: auto;
-            max-width: 100%;
-            height: 36px;
-            max-height: 100%;
-            margin: auto;
-          }
-        }
+        min-height: 70px;
+        padding: 12px 10px;
+        display: flex;
+        align-items: center;
+        border-bottom: 1px solid rgba(255,255,255,0.2);
       }
     }
 
@@ -64,74 +38,38 @@
     }
   }
 
-  .tb-primary-toolbar {
-    z-index: 2;
+  /* SIDEBAR BRANDING */
+  .sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
 
-    h1 {
-      font-size: 24px !important;
-      font-weight: 400 !important;
-    }
+  .custom-logo {
+    height: 40px;
+    width: 40px;
+    object-fit: contain;
+    background: #ffffff;
+    border-radius: 50%;
+    padding: 6px;
+    box-shadow: 0 0 5px rgba(0,0,0,0.15);
+  }
+
+  .custom-title {
+    font-size: 19px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 0.5px;
+  }
+
+  /* TOP TOOLBAR ATTRACTIVE CLEAN LOOK */
+  .tb-primary-toolbar {
+    backdrop-filter: blur(4px);
+    background: rgba(255, 0, 0, 0.85) !important;
   }
 
   .tb-main-content {
     overflow: auto;
     position: relative;
-  }
-
-  /* ----------------------- BRANDING & ALIGNMENT ----------------------- */
-
-  /* Sidebar header container override */
-  .custom-sidebar-header {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    padding: 12px !important;
-    min-height: 64px !important;
-  }
-
-  .sidebar-brand {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  /* Logo: use a white circular background to ensure contrast on red */
-  .custom-logo {
-    height: 36px;
-    width: 36px;
-    object-fit: contain;
-    background: #ffffff;
-    border-radius: 50%;
-    padding: 4px;
-  }
-
-  /* Sidebar title */
-  .custom-title {
-    font-size: 18px;
-    font-weight: 600;
-    color: #ffffff;
-  }
-
-  /* Top toolbar branding container */
-  .custom-top-title {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-left: 12px;
-  }
-
-  .topbar-logo {
-    height: 32px;
-    width: 32px;
-    object-fit: contain;
-    background: #ffffff;
-    border-radius: 50%;
-    padding: 4px;
-  }
-
-  .topbar-title {
-    font-size: 18px;
-    font-weight: 600;
-    color: #ffffff;
   }
 }
